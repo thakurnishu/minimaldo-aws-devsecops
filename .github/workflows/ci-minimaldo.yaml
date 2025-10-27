@@ -17,7 +17,7 @@ on:
 
 jobs:
   changes:
-    runs-on: ubuntu-homelab
+    runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.changes.outputs.backend }}
       frontend: ${{ steps.changes.outputs.frontend }}
@@ -37,7 +37,7 @@ jobs:
 
   build-and-push:
     needs: changes
-    runs-on: ubuntu-homelab
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write  # This allows pushing to GHCR
