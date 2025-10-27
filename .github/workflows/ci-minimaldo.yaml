@@ -105,10 +105,12 @@ jobs:
           make prod-image-push
 
       - name: Image Clean Up - ${{ matrix.component.name }}
+        if: steps.should_skip.outputs.skip != 'true'
+        working-directory: ${{ env.WORKING_DIR }}
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
           SERVICE: ${{ matrix.component.name }}
           TAG: ${{ steps.commit.outputs.short_sha }}
         run: |
-          echo "Pushing ${{ matrix.component.name }} images for commit: ${{ steps.commit.outputs.short_sha }}"
+          echo "Cleaning Up ${{ matrix.component.name }} images for commit: ${{ steps.commit.outputs.short_sha }}"
           make prod-image-cleanup
