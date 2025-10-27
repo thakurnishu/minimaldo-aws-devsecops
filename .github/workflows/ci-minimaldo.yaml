@@ -1,8 +1,6 @@
 name: CI MinimalDo
 
 env:
-  REGISTRY: ghcr.io
-  REPOSITORY_OWNER: ${{ github.repository_owner }}
   WORKING_DIR: "services"
   AWS_REGION: "us-east-1"
   ECR_REPO_PREFIX: "minimaldo"
@@ -86,8 +84,6 @@ jobs:
         if: steps.should_skip.outputs.skip != 'true'
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
-          AWS_REGION: ${{ env.AWS_REGION }}
-          ECR_REPO_PREFIX: ${{ env.ECR_REPO_PREFIX }}
           SERVICE: ${{ matrix.component.name }}
         run: |
           echo "Building ${{ matrix.component.name }} image for commit: ${{ steps.commit.outputs.short_sha }}"
@@ -98,8 +94,6 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
-          AWS_REGION: ${{ env.AWS_REGION }}
-          ECR_REPO_PREFIX: ${{ env.ECR_REPO_PREFIX }}
           SERVICE: ${{ matrix.component.name }}
         run: |
           echo "Pushing ${{ matrix.component.name }} images for commit: ${{ steps.commit.outputs.short_sha }}"
@@ -108,8 +102,6 @@ jobs:
       - name: Image Clean Up - ${{ matrix.component.name }}
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
-          AWS_REGION: ${{ env.AWS_REGION }}
-          ECR_REPO_PREFIX: ${{ env.ECR_REPO_PREFIX }}
           SERVICE: ${{ matrix.component.name }}
         run: |
           echo "Pushing ${{ matrix.component.name }} images for commit: ${{ steps.commit.outputs.short_sha }}"
