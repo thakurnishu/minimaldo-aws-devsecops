@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write  # This allows pushing to GHCR
+      id-token: write
     strategy:
       matrix:
         component:
