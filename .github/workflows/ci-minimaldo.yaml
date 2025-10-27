@@ -4,7 +4,7 @@ env:
   REGISTRY: ghcr.io
   REPOSITORY_OWNER: ${{ github.repository_owner }}
   WORKING_DIR: "services"
-  AWS_REGION: ""
+  AWS_REGION: "us-east-1"
   ECR_REPO_PREFIX: "minimaldo"
 
 on:
