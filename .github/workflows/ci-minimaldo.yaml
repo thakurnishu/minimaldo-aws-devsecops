@@ -85,6 +85,7 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
           SERVICE: ${{ matrix.component.name }}
+          TAG: ${{ steps.commit.outputs.short_sha }}
         run: |
           echo "Building ${{ matrix.component.name }} image for commit: ${{ steps.commit.outputs.short_sha }}"
           make prod-image-build 
@@ -95,6 +96,7 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
           SERVICE: ${{ matrix.component.name }}
+          TAG: ${{ steps.commit.outputs.short_sha }}
         run: |
           echo "Pushing ${{ matrix.component.name }} images for commit: ${{ steps.commit.outputs.short_sha }}"
           make prod-image-push
@@ -103,6 +105,7 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
           SERVICE: ${{ matrix.component.name }}
+          TAG: ${{ steps.commit.outputs.short_sha }}
         run: |
           echo "Pushing ${{ matrix.component.name }} images for commit: ${{ steps.commit.outputs.short_sha }}"
           make prod-image-cleanup
