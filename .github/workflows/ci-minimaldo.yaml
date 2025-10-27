@@ -3,14 +3,17 @@ name: CI MinimalDo
 env:
   REGISTRY: ghcr.io
   REPOSITORY_OWNER: ${{ github.repository_owner }}
+  WORKING_DIR: "services"
+  AWS_REGION: ""
+  ECR_REPO_PREFIX: "minimaldo"
 
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
     paths:
-      - backend/**
-      - frontend/**
+      - services/backend/**
+      - services/frontend/**
 
 jobs:
   changes:
@@ -28,9 +31,9 @@ jobs:
         with:
           filters: |
             backend:
-              - 'backend/**'
+              - services/backend/**
             frontend:
-              - 'frontend/**'
+              - services/frontend/**
 
   build-and-push:
     needs: changes
@@ -42,11 +45,7 @@ jobs:
       matrix:
         component:
           - name: backend
-            working_dir: backend
-            image_name: minimaldo-backend
           - name: frontend
-            working_dir: frontend
-            image_name: minimaldo-frontend
     steps:
       - name: Skip if no changes
         id: should_skip
@@ -73,34 +72,45 @@ jobs:
         if: steps.should_skip.outputs.skip != 'true'
         id: commit
         run: |
-          echo "short_sha=main-$(git rev-parse --short HEAD)-$(date +%s)" >> $GITHUB_OUTPUT
+          echo "short_sha=$(git rev-parse --abbrev-ref HEAD)-$(git rev-parse --short HEAD)-$(date +%s)" >> $GITHUB_OUTPUT
 
-      - name: Log in to GitHub Container Registry
-        if: steps.should_skip.outputs.skip != 'true'
-        uses: docker/login-action@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.0.0
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
 
       - name: Build Docker image - ${{ matrix.component.name }}
+        working-directory: ${{ env.WORKING_DIR }}
         if: steps.should_skip.outputs.skip != 'true'
-        working-directory: ${{ matrix.component.working_dir }}
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
+          AWS_REGION: ${{ env.AWS_REGION }}
+          ECR_REPO_PREFIX: ${{ env.ECR_REPO_PREFIX }}
+          SERVICE: ${{ matrix.component.name }}
         run: |
           echo "Building ${{ matrix.component.name }} image for commit: ${{ steps.commit.outputs.short_sha }}"
-          
-          # Add tags and context
-          BUILD_CMD="docker build \
-            -t ${{ env.REGISTRY }}/${{ env.REPOSITORY_OWNER }}/${{ matrix.component.image_name }}:latest \
-            -t ${{ env.REGISTRY }}/${{ env.REPOSITORY_OWNER }}/${{ matrix.component.image_name }}:${{ steps.commit.outputs.short_sha }} ."
-          
-          echo "Executing: $BUILD_CMD"
-          eval $BUILD_CMD
+          make prod-image-build 
 
       - name: Push Docker image - ${{ matrix.component.name }}
         if: steps.should_skip.outputs.skip != 'true'
-        working-directory: ${{ matrix.component.working_dir }}
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
+          AWS_REGION: ${{ env.AWS_REGION }}
+          ECR_REPO_PREFIX: ${{ env.ECR_REPO_PREFIX }}
+          SERVICE: ${{ matrix.component.name }}
         run: |
           echo "Pushing ${{ matrix.component.name }} images for commit: ${{ steps.commit.outputs.short_sha }}"
-          docker push ${{ env.REGISTRY }}/${{ env.REPOSITORY_OWNER }}/${{ matrix.component.image_name }}:latest
-          docker push ${{ env.REGISTRY }}/${{ env.REPOSITORY_OWNER }}/${{ matrix.component.image_name }}:${{ steps.commit.outputs.short_sha }}
+          make prod-image-push
+
+      - name: Image Clean Up - ${{ matrix.component.name }}
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }} 
+          AWS_REGION: ${{ env.AWS_REGION }}
+          ECR_REPO_PREFIX: ${{ env.ECR_REPO_PREFIX }}
+          SERVICE: ${{ matrix.component.name }}
+        run: |
+          echo "Pushing ${{ matrix.component.name }} images for commit: ${{ steps.commit.outputs.short_sha }}"
+          make prod-image-cleanup
