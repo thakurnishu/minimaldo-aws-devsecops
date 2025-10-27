@@ -1,0 +1,240 @@
+name: PR Check MinimalDo
+
+env:
+  REGISTRY: ghcr.io
+  REPOSITORY_OWNER: ${{ github.repository_owner }}
+  SONAR_HOST_URL: 'http://sonarqube-sonarqube.sonarqube:9000'
+  APP_NAME: "MinimalDo"
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - backend/**
+      - frontend/**
+
+jobs:
+  sonarqube-scan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-homelab
+    permissions:
+      pull-requests: 'write' #Needed to comment on the PR
+    outputs:
+      sonarqube_status: ${{ steps.sonarqube_result.outputs.sonarqube_status }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Shallow clones should be disabled for better relevancy of analysis
+
+    - name: SonarQube Scanner
+      uses: sonarsource/sonarqube-scan-action@v5
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+
+    - name: SonarQube Quality Gate check
+      id: sonarqube-quality-gate-check
+      uses: sonarsource/sonarqube-quality-gate-action@master
+      continue-on-error: true
+      timeout-minutes: 5
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+
+    - name: SonarQube Quality Gate Result
+      id: sonarqube_result
+      run: |
+        # Check both the step outcome and the quality gate status
+        if [[ "${{ steps.sonarqube-quality-gate-check.outcome }}" == "failure" ]] || [[ "${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}" == "FAILED" ]]; then
+          echo "sonarqube_result=❌ Failed" >> $GITHUB_OUTPUT
+          echo "sonarqube_status=failed" >> $GITHUB_OUTPUT
+        else
+          echo "sonarqube_result=✅ Passed" >> $GITHUB_OUTPUT
+          echo "sonarqube_status=passed" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create PR Comment
+      uses: actions/github-script@v7
+      env: 
+        SONARQUBE_QUALITY_GATE: "${{ steps.sonarqube_result.outputs.sonarqube_result }}"
+        SONARQUBE_STATUS: "${{ steps.sonarqube_result.outputs.sonarqube_status }}"
+        APPLICATION_NAME: "${{ env.APP_NAME }}"
+      with: 
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const output = `
+          #### SonarQube Quality Gate: ${process.env.SONARQUBE_QUALITY_GATE}
+          
+          ${process.env.SONARQUBE_STATUS === 'failed' ? '⚠️ Please review and fix the quality gate issues before merging.' : ''}
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          });
+
+  changes:
+    runs-on: ubuntu-homelab
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      
+      - name: Check for changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+
+  trivy-scan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-homelab
+    needs: changes
+    permissions:
+      pull-requests: 'write' #Needed to comment on the PR
+    outputs:
+      trivy_status: ${{ steps.set_trivy_status.outputs.trivy_status }}
+    strategy:
+      matrix:
+        component:
+          - name: backend
+            working_dir: backend
+            image_name: minimaldo-backend
+          - name: frontend
+            working_dir: frontend
+            image_name: minimaldo-frontend
+    steps:
+    - name: Skip if no changes
+      id: should_skip
+      run: |
+        if [ "${{ matrix.component.name }}" = "backend" ] && [ "${{ needs.changes.outputs.backend }}" = "true" ]; then
+          echo "Backend changes detected - building backend"
+          echo "skip=false" >> $GITHUB_OUTPUT
+        elif [ "${{ matrix.component.name }}" = "frontend" ] && [ "${{ needs.changes.outputs.frontend }}" = "true" ]; then
+          echo "Frontend changes detected - building frontend"
+          echo "skip=false" >> $GITHUB_OUTPUT
+        else
+          echo "No changes detected for ${{ matrix.component.name }} - skipping"
+          echo "skip=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Checkout code
+      if: steps.should_skip.outputs.skip != 'true'
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set short commit SHA
+      if: steps.should_skip.outputs.skip != 'true'
+      id: commit
+      run: echo "short_sha=pr-$(git rev-parse --short HEAD)-$(date +%s)" >> $GITHUB_OUTPUT
+
+    - name: Build Docker image - ${{ matrix.component.name }}
+      if: steps.should_skip.outputs.skip != 'true'
+      working-directory: ${{ matrix.component.working_dir }}
+      run: |
+        docker build \
+          -t ${{ env.REGISTRY }}/${{ env.REPOSITORY_OWNER }}/${{ matrix.component.image_name }}:${{ steps.commit.outputs.short_sha }} .
+
+    - name: Scan Docker image with Trivy - ${{ matrix.component.name }}
+      if: steps.should_skip.outputs.skip != 'true'
+      id: trivy
+      continue-on-error: true
+      uses: aquasecurity/trivy-action@0.32.0
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.REPOSITORY_OWNER }}/${{ matrix.component.image_name }}:${{ steps.commit.outputs.short_sha }}
+        format: table
+        severity: CRITICAL,HIGH
+        exit-code: '1'
+        output: trivy-${{ matrix.component.image_name }}.txt
+        ignore-unfixed: true
+
+    - name: Check Trivy output exists
+      if: steps.should_skip.outputs.skip != 'true'
+      id: check_trivy_output
+      run: |
+        if [ -f "trivy-${{ matrix.component.image_name }}.txt" ]; then
+          echo "file_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "file_exists=false" >> $GITHUB_OUTPUT
+          echo "Trivy scan failed - no output file generated" > trivy-${{ matrix.component.image_name }}.txt
+        fi
+
+    - name: Pass Environment
+      if: steps.should_skip.outputs.skip != 'true'
+      id: passed_env
+      run: |
+        trivy_output=$(<trivy-${{ matrix.component.image_name }}.txt)
+        echo "trivy_output<<EOF" >> $GITHUB_OUTPUT
+        echo "$trivy_output" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        echo "trivy_success=${{ steps.trivy.outcome }}" >> $GITHUB_OUTPUT
+
+    - name: Set Trivy Status
+      if: steps.should_skip.outputs.skip != 'true'
+      id: set_trivy_status
+      run: |
+        if [ "${{ steps.trivy.outcome }}" = "success" ]; then
+          echo "trivy_status=passed" >> $GITHUB_OUTPUT
+        else
+          echo "trivy_status=failed" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create PR Comment
+      if: steps.should_skip.outputs.skip != 'true'
+      uses: actions/github-script@v7
+      env: 
+        TRIVY_CHECK: "${{ steps.passed_env.outputs.trivy_output }}"
+        TRIVY_SUCCESS: "${{ steps.passed_env.outputs.trivy_success }}"
+        APPLICATION_NAME: "${{ env.APP_NAME }} ${{ matrix.component.name }}"
+      with: 
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const success = process.env.TRIVY_SUCCESS === 'success';
+          const status = success ? '✅ PASSED' : '❌ FAILED';
+          const output = `
+          #### ${process.env.APPLICATION_NAME}
+          #### Trivy Security Scan: ${status}
+          
+          <details><summary>Check Trivy Scan Results</summary>
+          
+          \`\`\`
+          ${process.env.TRIVY_CHECK}
+          \`\`\`
+          </details>
+          `;
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          });
+
+  final-check:
+    if: always()
+    runs-on: ubuntu-homelab
+    needs: [sonarqube-scan, trivy-scan]
+    steps:
+    - name: Check overall status
+      run: |
+        sonarqube_status="${{ needs.sonarqube-scan.outputs.sonarqube_status }}"
+        trivy_status="${{ needs.trivy-scan.outputs.trivy_status }}"
+        
+        echo "SonarQube Status: $sonarqube_status"
+        echo "Trivy Status: $trivy_status"
+        
+        if [ "$sonarqube_status" = "failed" ] || [ "$trivy_status" = "failed" ]; then
+          echo "❌ One or more checks failed"
+          exit 1
+        else
+          echo "✅ All checks passed"
+        fi
