@@ -1,16 +1,18 @@
-package main
+package db
 
 import (
 	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
+
+	"github.com/thakurnishu/MinimalDo/config"
 )
 
-func setupDB(cfg *Config) (db *sql.DB) {
+func SetupDB(cfg *config.Config) (db *sql.DB) {
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
-	
+
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		slog.Error("Failed to connect to database", "error", err)
@@ -24,14 +26,14 @@ func setupDB(cfg *Config) (db *sql.DB) {
 	}
 
 	// Initialize database
-	if err := initDB(db); err != nil {
-		slog.Error("Failed to initialize database", "error",err)
+	if err := InitDB(db); err != nil {
+		slog.Error("Failed to initialize database", "error", err)
 	}
 
 	return db
 }
 
-func initDB(db *sql.DB) error {
+func InitDB(db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS todos (
 		id SERIAL PRIMARY KEY,

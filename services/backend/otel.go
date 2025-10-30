@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/thakurnishu/MinimalDo/config"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
@@ -25,12 +26,11 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-
 type MultiHandler struct {
 	handlers []slog.Handler
 }
 
-func InitTelemetry(cfg *Config) (cleanup func(),logger *slog.Logger,tracer trace.Tracer,err error) {
+func InitTelemetry(cfg *config.Config) (cleanup func(), logger *slog.Logger, tracer trace.Tracer, err error) {
 	ctx := context.Background()
 
 	// OTEL resource
@@ -63,14 +63,14 @@ func InitTelemetry(cfg *Config) (cleanup func(),logger *slog.Logger,tracer trace
 	}, logger, tracer, nil
 }
 
-func initTracing(ctx context.Context, res *resource.Resource, cfg *Config) (func(), trace.Tracer, error) {
+func initTracing(ctx context.Context, res *resource.Resource, cfg *config.Config) (func(), trace.Tracer, error) {
 	// OTLP GRPC trace exporter
 	traceExporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(cfg.OtelExporterOtlpEndpointGRPC),
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to create trace exportor: %w", err)
+		return nil, nil, fmt.Errorf("failed to create trace exportor: %w", err)
 	}
 
 	// Trace provider
@@ -96,7 +96,7 @@ func initTracing(ctx context.Context, res *resource.Resource, cfg *Config) (func
 	}, tracer, nil
 }
 
-func initLogging(ctx context.Context, res *resource.Resource, cfg *Config) (func(), *slog.Logger, error) {
+func initLogging(ctx context.Context, res *resource.Resource, cfg *config.Config) (func(), *slog.Logger, error) {
 	// OTLP GRPC log exporter
 	logExporter, err := otlploggrpc.New(ctx,
 		otlploggrpc.WithEndpoint(cfg.OtelExporterOtlpEndpointGRPC),
@@ -116,7 +116,7 @@ func initLogging(ctx context.Context, res *resource.Resource, cfg *Config) (func
 	)
 
 	// Set global logger provider
-	global.SetLoggerProvider(loggerProvider)	
+	global.SetLoggerProvider(loggerProvider)
 
 	// Handlers
 	var handlers []slog.Handler
@@ -136,7 +136,7 @@ func initLogging(ctx context.Context, res *resource.Resource, cfg *Config) (func
 
 	if len(handlers) == 1 {
 		logHandler = handlers[0]
-	}	else {
+	} else {
 		logHandler = NewMultiHandler(handlers...)
 	}
 
@@ -184,7 +184,7 @@ func (h *MultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		newHandlers[i] = handler.WithAttrs(attrs)
 	}
 
-  return &MultiHandler{handlers: newHandlers}
+	return &MultiHandler{handlers: newHandlers}
 }
 
 func (h *MultiHandler) WithGroup(name string) slog.Handler {
@@ -195,7 +195,7 @@ func (h *MultiHandler) WithGroup(name string) slog.Handler {
 	return &MultiHandler{handlers: newHandlers}
 }
 
-var excludedPaths = map[string]bool {
+var excludedPaths = map[string]bool{
 	"/api/health": true,
 }
 
@@ -223,7 +223,7 @@ func LoggingMiddleware(logger *slog.Logger) gin.HandlerFunc {
 
 		// Add request context to logger
 		ctx := c.Request.Context()
-		
+
 		// Get trace information if available
 		span := trace.SpanFromContext(ctx)
 		traceID := span.SpanContext().TraceID().String()
