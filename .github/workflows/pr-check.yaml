@@ -16,7 +16,7 @@ on:
 jobs:
   sonarqube-scan:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-homelab
+    runs-on: minimaldo-aws-devsecops-ubuntu-homelab
     permissions:
       pull-requests: 'write' #Needed to comment on the PR
     outputs:
