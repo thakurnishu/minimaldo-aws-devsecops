@@ -6,6 +6,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+
 # Stage 2: Serve the build with Nginx
 FROM nginx:alpine3.22
 COPY --from=build /app/build /usr/share/nginx/html
