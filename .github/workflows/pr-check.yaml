@@ -8,8 +8,8 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - backend/**
-      - frontend/**
+      - services/backend/**
+      - services/frontend/**
 
 jobs:
   sonarqube-scan:
@@ -89,9 +89,9 @@ jobs:
         with:
           filters: |
             backend:
-              - 'backend/**'
+              - 'services/backend/**'
             frontend:
-              - 'frontend/**'
+              - 'services/frontend/**'
 
   trivy-scan:
     if: github.event_name == 'pull_request'
