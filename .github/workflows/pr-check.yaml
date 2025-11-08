@@ -77,7 +77,7 @@ jobs:
           });
 
   changes:
-    runs-on: ubuntu-homelab
+    runs-on: minimaldo-aws-devsecops-ubuntu-homelab
     outputs:
       backend: ${{ steps.changes.outputs.backend }}
       frontend: ${{ steps.changes.outputs.frontend }}
@@ -97,7 +97,7 @@ jobs:
 
   trivy-scan:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-homelab
+    runs-on: minimaldo-aws-devsecops-ubuntu-homelab
     needs: changes
     permissions:
       pull-requests: 'write' #Needed to comment on the PR
@@ -221,7 +221,7 @@ jobs:
 
   final-check:
     if: always()
-    runs-on: ubuntu-homelab
+    runs-on: minimaldo-aws-devsecops-ubuntu-homelab
     needs: [sonarqube-scan, trivy-scan]
     steps:
     - name: Check overall status
