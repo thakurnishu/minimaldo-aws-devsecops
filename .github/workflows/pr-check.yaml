@@ -1,10 +1,8 @@
 name: PR Check MinimalDo
 
 env:
-  REGISTRY: ghcr.io
-  REPOSITORY_OWNER: ${{ github.repository_owner }}
   SONAR_HOST_URL: 'http://sonarqube-sonarqube.sonarqube:9000'
-  APP_NAME: "MinimalDo"
+  APP_NAME: "minimaldo"
 
 on:
   pull_request:
@@ -143,7 +141,7 @@ jobs:
       working-directory: ${{ matrix.component.working_dir }}
       run: |
         docker build \
-          -t ${{ env.REGISTRY }}/${{ env.REPOSITORY_OWNER }}/${{ matrix.component.image_name }}:${{ steps.commit.outputs.short_sha }} .
+          -t ${{ matrix.component.image_name }}:${{ steps.commit.outputs.short_sha }} .
 
     - name: Scan Docker image with Trivy - ${{ matrix.component.name }}
       if: steps.should_skip.outputs.skip != 'true'
@@ -151,7 +149,7 @@ jobs:
       continue-on-error: true
       uses: aquasecurity/trivy-action@0.32.0
       with:
-        image-ref: ${{ env.REGISTRY }}/${{ env.REPOSITORY_OWNER }}/${{ matrix.component.image_name }}:${{ steps.commit.outputs.short_sha }}
+        image-ref: ${{ matrix.component.image_name }}:${{ steps.commit.outputs.short_sha }}
         format: table
         severity: CRITICAL,HIGH
         exit-code: '1'
